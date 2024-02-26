@@ -92,12 +92,29 @@ class NSLookupApp(QMainWindow):
         self.completion_label.hide()
         self.bundle_label.hide()
 
+        # 在每次開始執行前都初始紀錄
+        self.first_ip = None
+        self.unique_domains = set()
+
         selected_dns = self.dns_combobox.currentText().split()[0]
         domains = self.domain_entry.text().split()
 
         QTimer.singleShot(10, lambda: self.perform_nslookup(domains, selected_dns))
 
     def perform_nslookup(self, domains, selected_dns):
+        unique_domains = set()
+
+        def process_domain(domain, ip_addresses):
+            result_str = f"{domain}: {', '.join(ip_addresses)}\n"
+
+            if self.first_ip is None:
+                self.first_ip = ip_addresses[0]
+            elif ip_addresses != [self.first_ip] and domain not in unique_domains:
+                unique_domains.add(domain)
+                self.filtered_output_text.insertPlainText(result_str)
+
+            self.output_text.insertPlainText(result_str)
+
         if not domains:
             self.show_completion_message()
             return
@@ -109,16 +126,8 @@ class NSLookupApp(QMainWindow):
             resolver.nameservers = [selected_dns]
             result = resolver.query(domain)
 
-            for rdata in result:
-                ip_address = rdata.address
-                result_str = f"{domain}: {ip_address}\n"
-
-                if self.first_ip is None:
-                    self.first_ip = ip_address
-                elif ip_address != self.first_ip:
-                    self.filtered_output_text.insertPlainText(f"{domain}: {ip_address}\n")
-
-                self.output_text.insertPlainText(result_str)
+            ip_addresses = [rdata.address for rdata in result]
+            process_domain(domain, ip_addresses)
 
         except dns.exception.DNSException as e:
             error_message = f"{domain}: 無解析\n"
